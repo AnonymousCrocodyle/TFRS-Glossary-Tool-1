@@ -1,10 +1,16 @@
 import os
 import csv
+import traceback
 from docx import Document
 import spacy
 from sentence_transformers import SentenceTransformer, util
 from xml.sax.saxutils import escape
-import traceback
+
+LOG_FILE = "error_log.txt"
+
+def log_error(msg):
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(msg + "\n")
 
 def main():
     try:
@@ -14,15 +20,18 @@ def main():
         MIN_SCORE = 0.75
 
         print("Modeller yükleniyor...")
+        log_error("Modeller yükleniyor...")
         tr_nlp = spacy.load("tr_core_news_sm")
         en_nlp = spacy.load("en_core_web_sm")
         sbert = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+        log_error("Modeller yüklendi.")
 
         def load_paragraphs(path):
             doc = Document(path)
             return [p.text.strip() for p in doc.paragraphs if p.text.strip()]
 
         print("Belgeler okunuyor...")
+        log_error("Belgeler okunuyor...")
         tr_pars = load_paragraphs(os.path.join(FOLDER, TR_FILE))
         en_pars = load_paragraphs(os.path.join(FOLDER, EN_FILE))
 
@@ -37,11 +46,16 @@ def main():
             return sorted(terms)
 
         print("Terimler çıkarılıyor...")
+        log_error("Terimler çıkarılıyor...")
         tr_terms = extract_terms(tr_pars, tr_nlp)
         en_terms = extract_terms(en_pars, en_nlp)
+        log_error(f"Türkçe terim sayısı: {len(tr_terms)}")
+        log_error(f"İngilizce terim sayısı: {len(en_terms)}")
 
-        print(f"{len(tr_terms)} Türkçe, {len(en_terms)} İngilizce terim bulundu.")
+        print(f"{len(tr_terms)} Türkçe terim, {len(en_terms)} İngilizce terim bulundu.")
         print("Eşleştirme başlıyor...")
+        log_error("Eşleştirme başlıyor...")
+
         tr_embeddings = sbert.encode(tr_terms, convert_to_tensor=True)
         en_embeddings = sbert.encode(en_terms, convert_to_tensor=True)
         cosine_scores = util.cos_sim(tr_embeddings, en_embeddings)
@@ -72,6 +86,7 @@ def main():
             writer.writerow(["Türkçe Terim", "İngilizce Terim"])
             writer.writerows(approved)
         print(f"CSV oluşturuldu: {csv_path}")
+        log_error("CSV oluşturuldu.")
 
         tmx_path = os.path.join(FOLDER, "TFRS18_Glossary.tmx")
         with open(tmx_path, "w", encoding="utf-8") as f:
@@ -86,13 +101,16 @@ def main():
                 f.write('    </tu>\n')
             f.write('  </body>\n</tmx>')
         print(f"TMX oluşturuldu: {tmx_path}")
+        log_error("TMX oluşturuldu.")
 
     except Exception as e:
-        print("Hata oluştu:", e)
-        traceback.print_exc()
+        print("\nHata oluştu:", e)
+        log_error("Hata: " + str(e))
+        log_error(traceback.format_exc())
 
     finally:
-        input("\nİşlem tamamlandı. Çıkmak için Enter'a basın...")
+        print("\nİşlem tamamlandı. Detaylar error_log.txt dosyasında.")
+        input("Çıkmak için Enter'a bas...")
 
 if __name__ == "__main__":
     main()
